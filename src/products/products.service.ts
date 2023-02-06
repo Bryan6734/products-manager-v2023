@@ -10,41 +10,46 @@ export class ProductsService {
 
   constructor(
     @InjectModel('Product') private readonly productModel: Model<Product>
-    ){
+    ){}
 
-  }
-
-  insertProduct(title: string, desc:string, price: number){
-    const prodId = Math.random().toString()
+  // 
+  async insertProduct(title: string, desc:string, price: number){
     const newProduct = new this.productModel({
-      title,
-      desc,
-      price
+      title: title,
+      description: desc,
+      price: price,
     });
-    this.products.push(newProduct);
-    return prodId;
+
+    // this save method is provided by mongoose
+    // mongoose creates a mongodb query
+    // save returns a promise; await waits until we get the value
+    const result = await newProduct.save();
+    return result.id as string;
+
   }
 
-  getProducts(){
-    // if we return this.products, we're sending a reference (not a copy). this is dangerous!
-    // must send copy
-    console.log(this.products);
-    return [...this.products];
+  async getProducts(){
+    // exec gives you a "real" promise
+    const products = await this.productModel.find().exec();
+    // no need to use [...] syntax because we already made an ew copy
+    return products.map((prod) => ({
+      id: prod.id,
+      title: prod.title,
+      description: prod.description,
+      price: prod.price
+    }));
   }
 
-  getSingleProduct(productId: string){
-    const product = this.findProduct(productId)[0];
-    return {... product};
+  async getSingleProduct(productId: string){
+    const product = await this.findProduct(productId);
+    return { id: product.id, title: product.title, description: product.description, price: product.price};
   }
 
 
-  updateProduct(productId: string, title: string, desc: string, price: number){
+  async updateProduct(productId: string, title: string, desc: string, price: number){
 
-    // for the product, we need to make sure we dont update with null valjues
-    const [product, index] = this.findProduct(productId);
-    const updatedProduct = {...product};
-    console.log("update")
-    console.log(updatedProduct)
+    // returns a copy of a new product
+    const updatedProduct = await this.findProduct(productId)
 
     if (title) {
       updatedProduct.title = title;
@@ -56,7 +61,7 @@ export class ProductsService {
       updatedProduct.price = price;
     }
 
-    this.products[index] = updatedProduct; 
+    updatedProduct.save();
 
   }
 
@@ -66,16 +71,30 @@ export class ProductsService {
 
   }
 
-  private findProduct(id: string): [Product, number] {
-    const productIndex = this.products.findIndex((prod) => prod.id === id)
-    const product = this.products[productIndex]
-    // create a copy of a new product OBJECT 
-    if (!product){
-      throw new NotFoundException('Could not find product');
+  // private findProduct(id: string): [Product, number] {
+  //   const productIndex = this.products.findIndex((prod) => prod.id === id)
+  //   const product = this.products[productIndex]
+  //   // create a copy of a new product OBJECT 
+  //   if (!product){
+  //     throw new NotFoundException('Could not find product');
+  //   }
+  //   return [product, productIndex];
+  // }
+
+  private async findProduct(id: string): Promise<Product> {
+    // findOne is an extra product model that exists for cases where you need one item from mongoose
+    // stops after it finds the first one
+    // findByID finds by id
+    let product;
+    try {
+      product = await this.productModel.findById(id);
+    } catch (error) {
+      throw new NotFoundException('Could not find product.')
     }
-    return [product, productIndex];
+    if (!product) {
+      throw new NotFoundException('Could not find product.');
+    }
+    // returns Mongoose's object
+    return product;
   }
-
-  
-
 }
